@@ -1,56 +1,56 @@
 const express = require('express');
+const cors = require('cors');
+
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-
+// Allow requests from browsers/other origins
+app.use(cors());
 app.use(express.json());
 
+// Use Render's port in prod, 3000 locally
+const PORT = process.env.PORT || 3000;
+
+// In‑memory data
 let totalBudget = 0;
 let envelopes = [];
 let nextId = 1;
 
-app.get('/', (req, res) => {
-  res.send('Hello, World');
-});
+// Health checks (both root and /api for convenience)
+app.get('/', (req, res) => res.send('Hello, World'));
+app.get('/api', (req, res) => res.send('Hello, World'));
 
 // Create envelope
-app.post('/envelopes', (req, res) => {
+app.post('/api/envelopes', (req, res) => {
   const { name, budget } = req.body;
-
   if (!name || typeof budget !== 'number' || budget < 0) {
     return res.status(400).json({ error: 'Invalid name or budget' });
   }
-
   const envelope = { id: nextId++, name, budget, balance: budget };
   envelopes.push(envelope);
   totalBudget += budget;
-
   res.status(201).json(envelope);
 });
 
 // Get all envelopes
-app.get('/envelopes', (req, res) => {
+app.get('/api/envelopes', (req, res) => {
   res.json(envelopes);
 });
 
 // Get specific envelope
-app.get('/envelopes/:id', (req, res) => {
-  const id = parseInt(req.params.id);
+app.get('/api/envelopes/:id', (req, res) => {
+  const id = Number(req.params.id);
   const envelope = envelopes.find(env => env.id === id);
-  if (!envelope) {
-    return res.status(404).json({ error: 'Envelope not found' });
-  }
+  if (!envelope) return res.status(404).json({ error: 'Envelope not found' });
   res.json(envelope);
 });
 
 // Update envelope
-app.put('/envelopes/:id', (req, res) => {
-  const id = parseInt(req.params.id);
+app.put('/api/envelopes/:id', (req, res) => {
+  const id = Number(req.params.id);
   const { name, budget, balance } = req.body;
   const envelope = envelopes.find(env => env.id === id);
-  if (!envelope) {
-    return res.status(404).json({ error: 'Envelope not found' });
-  }
+  if (!envelope) return res.status(404).json({ error: 'Envelope not found' });
+
   if (budget !== undefined) {
     if (typeof budget !== 'number' || budget < 0) {
       return res.status(400).json({ error: 'Invalid budget value' });
@@ -72,36 +72,26 @@ app.put('/envelopes/:id', (req, res) => {
 });
 
 // Delete envelope
-app.delete('/envelopes/:id', (req, res) => {
-  const id = parseInt(req.params.id);
+app.delete('/api/envelopes/:id', (req, res) => {
+  const id = Number(req.params.id);
   const index = envelopes.findIndex(env => env.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Envelope not found' });
-  }
+  if (index === -1) return res.status(404).json({ error: 'Envelope not found' });
   const deleted = envelopes.splice(index, 1)[0];
   totalBudget -= deleted.budget;
   res.status(204).send();
 });
 
 // Transfer funds
-app.post('/envelopes/transfer', (req, res) => {
+app.post('/api/envelopes/transfer', (req, res) => {
   const { fromId, toId, amount } = req.body;
-  if (
-    typeof fromId !== 'number' ||
-    typeof toId !== 'number' ||
-    typeof amount !== 'number' ||
-    amount <= 0
-  ) {
+  if (typeof fromId !== 'number' || typeof toId !== 'number' || typeof amount !== 'number' || amount <= 0) {
     return res.status(400).json({ error: 'Invalid input data' });
   }
   const fromEnvelope = envelopes.find(env => env.id === fromId);
   const toEnvelope = envelopes.find(env => env.id === toId);
-  if (!fromEnvelope || !toEnvelope) {
-    return res.status(404).json({ error: 'Envelope(s) not found' });
-  }
-  if (fromEnvelope.balance < amount) {
-    return res.status(400).json({ error: 'Insufficient funds' });
-  }
+  if (!fromEnvelope || !toEnvelope) return res.status(404).json({ error: 'Envelope(s) not found' });
+  if (fromEnvelope.balance < amount) return res.status(400).json({ error: 'Insufficient funds' });
+
   fromEnvelope.balance -= amount;
   toEnvelope.balance += amount;
   res.json({ fromEnvelope, toEnvelope });
