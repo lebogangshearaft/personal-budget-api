@@ -1,23 +1,75 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
 
 const app = express();
-
-// Allow requests from browsers/other origins
 app.use(cors());
 app.use(express.json());
 
-// Use Render's port in prod, 3000 locally
 const PORT = process.env.PORT || 3000;
 
-// In‑memory data
+/* =========================
+   NSFAS BUDGET CALCULATOR
+   ========================= */
+// Defaults (tweak these to your real monthly situation)
+const DEFAULT_ALLOWANCE = 1650; // example monthly cash allowance
+const DEFAULT_EXPENSES = {
+  accommodation: 750,
+  transport: 300,
+  groceries: 400,
+  data: 150,
+  // add more if you like:
+  // toiletries: 100,
+  // stationery: 80,
+};
+
+function calcBudget(allowance, expenses) {
+  const totalExpenses = Object.values(expenses).reduce((s, v) => s + v, 0);
+  const remaining = allowance - totalExpenses;
+  return {
+    nsfasAllowance: allowance,
+    expenses,
+    totalExpenses,
+    remaining,
+    message: remaining >= 0 ? 'You are within your budget.' : 'You are overspending!'
+  };
+}
+
+// Show your default NSFAS budget (handy for browsers)
+app.get('/', (req, res) => {
+  res.json(calcBudget(DEFAULT_ALLOWANCE, DEFAULT_EXPENSES));
+});
+
+// Same at /api (for consistency)
+app.get('/api', (req, res) => {
+  res.json(calcBudget(DEFAULT_ALLOWANCE, DEFAULT_EXPENSES));
+});
+
+// Customize via POST (send your allowance/expenses)
+app.post('/api/nsfas-budget', (req, res) => {
+  let { allowance, expenses } = req.body;
+
+  if (allowance !== undefined && (typeof allowance !== 'number' || allowance < 0)) {
+    return res.status(400).json({ error: 'allowance must be a non‑negative number' });
+  }
+  if (expenses !== undefined && (typeof expenses !== 'object' || Array.isArray(expenses))) {
+    return res.status(400).json({ error: 'expenses must be an object like { groceries: 400, data: 150 }' });
+  }
+
+  allowance = typeof allowance === 'number' ? allowance : DEFAULT_ALLOWANCE;
+  expenses = expenses || DEFAULT_EXPENSES;
+
+  res.json(calcBudget(allowance, expenses));
+});
+
+/* =========================
+   ENVELOPE BUDGETING API
+   (kept for full project spec)
+   Base path: /api/envelopes
+   ========================= */
 let totalBudget = 0;
 let envelopes = [];
 let nextId = 1;
-
-// Health checks (both root and /api for convenience)
-app.get('/', (req, res) => res.send('Hello, World'));
-app.get('/api', (req, res) => res.send('Hello, World'));
 
 // Create envelope
 app.post('/api/envelopes', (req, res) => {
@@ -32,7 +84,7 @@ app.post('/api/envelopes', (req, res) => {
 });
 
 // Get all envelopes
-app.get('/api/envelopes', (req, res) => {
+app.get('/api/envelopes', (_req, res) => {
   res.json(envelopes);
 });
 
@@ -65,9 +117,8 @@ app.put('/api/envelopes/:id', (req, res) => {
     }
     envelope.balance = balance;
   }
-  if (name !== undefined) {
-    envelope.name = name;
-  }
+  if (name !== undefined) envelope.name = name;
+
   res.json(envelope);
 });
 
@@ -97,6 +148,5 @@ app.post('/api/envelopes/transfer', (req, res) => {
   res.json({ fromEnvelope, toEnvelope });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-});
+// Start server
+app.listen(PORT, () => console.log(`API running on port ${PORT}`));
